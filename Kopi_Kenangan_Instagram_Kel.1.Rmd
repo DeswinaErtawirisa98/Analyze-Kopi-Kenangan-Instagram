@@ -1,0 +1,234 @@
+---
+title: "Kel.1_Kopi Kenangan"
+author: "Deswina, Abhie, Wahid"
+date: '2022-07-05'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(lubridate)
+library(dplyr)
+library(googlesheets4)
+library(tidyverse)
+```
+```{r}
+follower <- read_xlsx("Data/IG Follower Scraping.xlsx")
+post <- read_xlsx("Data/IG post Scraping.xlsx")
+```
+```{r}
+head(post)
+```
+```{r}
+post %>% 
+  group_by(Name) %>% 
+  count(name = "Total Post") %>% 
+  arrange(Name)
+```
+
+```{r}
+df_post <- post %>% 
+  filter(Name == "Kopi Kenangan")
+```
+```{r}
+df_post %>% 
+  group_by(Name) %>% 
+  count(name = "Total Post")
+```
+```{r}
+df_post %>% 
+  mutate(Date = Date + hours(7))
+```
+```{r}
+df_post <- df_post %>% 
+  select(-Platform) %>% 
+  mutate(Engagement = `Likes and Comment` ) %>% 
+  select(-`Likes and Comment`)
+
+```
+```{r}
+df_follower <- follower %>% 
+  select(Date, `Kopi Kenangan`)
+```
+``
+```{r}
+ndf_post <- df_post %>% 
+  mutate(full_date = Date) %>% 
+  relocate(full_date, .after = Date) %>% 
+  mutate(Date = date(Date))
+ 
+```
+```{r}
+ndf_post %>% 
+  mutate(tahun = year(Date)) %>% 
+  group_by(tahun) %>% 
+  count()
+```
+#Menghapus tahun selain 2022 di ndf_post
+```{r}
+ndf_post <- ndf_post %>% 
+  mutate(tahun = year(Date)) %>% 
+  filter(tahun == "2022") %>% 
+  select(-tahun)
+ 
+```
+```{r}
+ final_follower <- df_follower %>% 
+  select(Date, Follower = `Kopi Kenangan`) %>% 
+  mutate(Name = "Kopi Kenangan" )
+```
+
+
+#Menghapus tahun selain 2022 di final_follower
+```{r}
+final_follower <- final_follower %>% 
+  mutate(tahun = year(Date)) %>% 
+  filter(tahun == "2022") %>% 
+  select(-tahun)
+```
+
+#Mengecek jumlah missing values
+```{r}
+sapply(ndf_post, function(x) sum(is.na(x)))
+
+```
+#Mengecek duplicates
+```{r}
+sum(duplicated(ndf_post))
+```
+```{r}
+summary(ndf_post)
+```
+##Menambahkan Variable baru "Image" ke ndf_post
+```{r}
+ndf_post <- ndf_post %>% 
+  mutate(Image = paste(Link, "media?size=l", sep = "")) 
+```
+
+#Menambahkan variable 'Different' yaitu selisih followers perhari
+```{r}
+final_follower <- final_follower %>% 
+  mutate(`Different` = `Follower`-lag(`Follower`))
+
+```
+
+# Jam berapa saja yang postingannya memiliki engagement terbanyak?
+```{r}
+ndf_post <- ndf_post %>% 
+  mutate(Hour = hour(full_date)) 
+
+
+ndf_post %>% 
+  group_by(Hour) %>% 
+  summarise(total = n(), `Mean Engagement` = mean(Engagement)) %>% 
+  arrange(desc(`Mean Engagement`))
+```
+
+# Kapan Enggagement tertinggi?
+```{r}
+ndf_post <- ndf_post %>% 
+  mutate('Time Background' = ifelse(Hour == 6 | Hour == 7 | Hour == 8 | Hour == 9 | Hour == 10 | Hour == 11,
+                                "Morning",
+                                ifelse(Hour == 12 | Hour == 13 | Hour == 14 | Hour == 15 | Hour == 16 | Hour == 17, "Afternoon",
+                                       ifelse(Hour == 18 | Hour == 19 | Hour == 20 | Hour == 21, "Evening" , 
+                                              "Night"))))
+ndf_post %>% 
+  group_by(`Time Background`) %>% 
+  summarise(Total = n(), `Mean engagement` = mean(Engagement), sum(Engagement)) %>% 
+  arrange(desc(`Mean engagement`))
+```
+
+```{r}
+final_follower[is.na(final_follower)] <- 0
+```
+
+# Berapa rata-rata pertambahan jumlah follower perhari?
+```{r}
+final_follower%>% 
+  group_by(Date = weekdays(Date)) %>% 
+  summarise(`Different Follower` = mean(Different)) %>% 
+  arrange(desc(`Different Follower`))
+```
+
+# Pada tanggal berapa pertambahan follower terbanyak?
+```{r}
+final_follower%>% 
+  group_by(Date) %>% 
+  summarise(`Total Different of Follower` = sum(Different)) %>% 
+  arrange(desc(`Total Different of Follower`))
+```
+
+# Pada tanggal berapa pertambahan follower paling sedikit?
+```{r}
+final_follower%>% 
+  group_by(Date) %>% 
+  summarise(Sum = sum(Different)) %>% 
+  arrange(Sum)
+```
+
+# Pada bulan apa pertambahan follower terbanyak?
+```{r}
+final_follower %>% 
+  group_by(Month = months(Date)) %>% 
+  summarise(`Different Follower` = sum(Different)) %>% 
+  arrange(desc(`Different Follower`))
+```
+
+```{r}
+ndf_post <- ndf_post %>% 
+  mutate(Caption = tolower(Caption)) %>% 
+  mutate(group = case_when(grepl("giveaway", Caption) ~ "Giveaway",
+                           grepl("promo",Caption) ~ "Promo",
+                           grepl("cashback",Caption) ~ "Promo",
+                           grepl("hemat",Caption) ~ "Promo",
+                           grepl("gratis",Caption) ~ "Promo",
+                           grepl("potongan",Caption) ~ "Promo",
+                           grepl("diskon",Caption) ~ "Promo",
+                           grepl("", Caption, ignore.case = TRUE) ~"Others"))
+```
+
+# 5 Konten apa yang mendapatkan engagement terbanyak?
+
+```{r}
+ndf_post %>% 
+  summarise(Engagement, Caption, group) %>% 
+  arrange(desc(Engagement))
+```
+
+# Postingan tentang apa yang memiliki Engagement tertinggi? 
+```{r}
+ndf_post %>% 
+  group_by(group) %>% 
+  summarise(total = n(), mean = mean(Engagement), mean(Likes), mean(Comment)) %>% 
+  arrange(desc(mean))
+```
+```{r}
+gs4_auth(path = "my_api_key.json")
+```
+```{r}
+gsheet <- gs4_get("https://docs.google.com/spreadsheets/d/1cyMJTmeCQ0nfECnuImJrpO81PM3qmhfBES28cNaTYd8/edit#gid=0")
+
+```
+
+```{r}
+range_write(gsheet,
+            ndf_post,
+            sheet = "DF_Post")
+
+range_write(gsheet,
+            final_follower,
+           sheet = "DF_Follower")
+```
+
+
+
+
+
+
+
+
+
